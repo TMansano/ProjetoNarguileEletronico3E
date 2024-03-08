@@ -1,0 +1,421 @@
+// original library source:
+// www.ladyada.net/learn/sensors/thermocouple
+/*
+ * Arduino code to read temperature using MAX6675 chip and k-type thermocouple
+ * and display it on serial monitor
+ * This code is "AS IS" without warranty or liability. Free to be used as long as you keep this note intact.* 
+ * This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#include <RotaryEncoder.h>
+#include <Arduino.h>
+#include <LiquidCrystal.h>  // Biblioteca LCD
+#include <LiquidCrystal_I2C.h>
+#include <wire.h>
+#include "max6675.h"  // max6675.h file is part of the library that you should download from Robojax.com
+int soPin = 4;        // SO=Serial Out
+int csPin = 5;        // CS = chip select CS pin
+int sckPin = 6;       // SCK = Serial Clock pin
+int next_millis = 0;
+int sec = 0;
+int hrs = 0;
+int minute = 0;
+int carga_bateria = 0;
+int Temperatura_alvo = 0;
+int celsius = 0;
+
+//define a inicialização do LCD i2c
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+MAX6675 robojax(sckPin, csPin, soPin);
+
+void setup() {
+
+  //-------------definição da inicialização dos sistemas--------------------------
+  lcd.begin(16, 2);
+  lcd.init();
+  lcd.backlight();
+  Serial.begin(9600);
+  delay(1000);
+  carga_bateria();
+  //-------------Entradas e Saidas--------------------------
+  pinMode(6, OUTPUT);        // mosfet
+  pinMode(2, INPUT_PULLUP);  //Reset BUTTON1
+
+  //----------------------FUNÇÂO QUE ANALISA A TEMPERATURA DO SENSOR--------------
+  temperatura_resistencia = robojax.readCelsius();
+
+  encoder.setPosition(temperatura_resistencia + 1);  //Seta a posição do encoder à um grau a mais que a temperatura lida
+
+
+  //----------tela 1----------(boot)
+  lcd.print("    Narguile Elet. V1");
+  lcd.setCursor(0, 1);
+  lcd.print("  Leo");
+  delay(20000);
+
+  //----------registra o offset-------------------
+  millis_offset = millis();
+}
+
+
+void loop() {
+  lcd.clear();  //limpa a tela
+
+  carga_bateria();  //analisa a carga da bateria
+
+  contador_millis = millis() - millis_offset;
+  //----------------------FUNÇÂO QUE ANALISA A TEMPERATURA DO SENSOR--------------
+  temperatura_resistencia = robojax.readCelsius();
+
+  //-----------------"contador acompanhador"---------------//string a ser impressa na LCD
+  sprintf(buf, "%02d:%02d:%02d     ", contador_millis / 3600, (restodadivisaopor % 3600) / 60, ((restodadivisaopor % 3600) % 60) / 60);
+
+
+
+
+  //--------------------------------------------------tela 2----------(tela principal)
+  lcd.print(temperatura_resistencia);
+  lcd.print((char)223);
+  lcd.print("/");
+  lcd.print(temperatura_alvo);
+  lcd.print((char)223);
+
+  lcd.print("   (energySimbol) ");
+  lcd.print(carga_bateria);
+  lcd.print("%");
+  lcd.setCursor(0, 1);
+  lcd.print("(horaSimbol) ");
+  lcd.print(buf);
+  //------------------------------------------------------------------------------------------------
+
+
+  //se clicar vai parar o menu 3    //t----------tela 3----------(menu principal de opções)
+  botao = digitalRead(6);
+  if (botao == LOW) {
+
+    lcd.clear();
+    encoder.setPosition(1);
+
+
+    //parte do cursor
+    if (newPos == 1 or 3) {
+      a = 0;
+      b = 0;
+    }
+    if (newPos == 2 or 4) {
+      a = 0;
+      b = 1;
+    }
+    lcd.setCursor(a, b);
+    lcd.print(">");
+
+    if (newPos < 2) {
+      lcd.setCursor(1, 0);
+      lcd.print("Aquece/Ajustar");
+      lcd.setCursor(1, 1);
+      lcd.print("Esfriar");
+    } else {
+      lcd.setCursor(1, 0);
+      lcd.print("Bateria");
+      lcd.setCursor(1, 1);
+      lcd.print("Voltar");
+    }
+  }
+
+
+
+  //t----------tela 4----------(temperatural alvo)------------------------------------------------------------------------------------
+  lcd.print("temperatura");
+  lcd.print(temperatura_alvo);
+#define outputA 6
+#define outputB 7
+
+  int counter = 0;
+  int aState;
+  int aLastState;
+
+  void setup() {
+    pinMode(outputA, INPUT);
+    pinMode(outputB, INPUT);
+    // Reads the initial state of the outputA
+    aLastState = digitalRead(outputA);
+  }
+
+  void loop() {
+    aState = digitalRead(outputA);  // Reads the "current" state of the outputA
+    // If the previous and the current state of the outputA are different, that means a Pulse has occured
+    if (aState != aLastState) {
+      // If the outputB state is different to the outputA state, that means the encoder is rotating clockwise
+      if (digitalRead(outputB) != aState) {
+        temperatura_alvo++;
+        //temperatura_alvo=counter;
+        //lcd.clear();
+      } else {
+        temperatura_alvo--;
+        //lcd.clear();
+      }
+      Serial.print("Position: ");
+      Serial.println(counter);
+      lcd.setCursor(0, 0);
+      lcd.print("Position: ");
+      lcd.setCursor(10, 0);
+      lcd.print(counter);
+    }
+    aLastState = aState;  // Updates the previous state of the outputA with the current state
+  }
+  //fim (fom do cógigo "temperatura Alvo" -----------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+  //t----------tela 5----------(menu opções)
+  lcd.print("Consumo Bat.");
+  lcd.print(consumo_bateria);
+  lcd.setCursor(0, 1);
+  lcd.print("(horaSimbol) Sessao");
+  lcd.print(buf);
+
+
+  //------------------------------PARTE DE CONTROLE (Bang Bang) ---------------------------------
+  if (resistance_temperature < TempSetada) {
+    digitalWrite(6, HIGH);  //polariza o mosfet (Aquece)
+  } else {
+    digitalWrite(6, LOW);  //despolariza (esfria)
+  }
+
+
+
+
+
+  // if
+  if (select == 0) { zero(); }
+  if (select == 1) { um(); }
+  if (select == 2) { dois(); }
+  if (select == 3) { tres(); }
+  if (select == 4) { quatro(); }
+}
+
+
+
+
+
+
+
+
+
+
+void carga_bateria() {
+  carga_bateria = ((analogRead(ANALOGREADING) * 5) / 1024) * 20;
+}
+
+
+
+
+
+#define ROTARYMIN 0
+#define ROTARYMAX 4
+
+// Setup a RoraryEncoder for pins A2 and A3:
+RotaryEncoder encoder(A2, A3);
+
+// Last known rotary position.
+int lastPos = -1;
+int newPos;
+int botao = 6;
+int select = 0;
+int a;
+int b;
+
+void setup() {
+  pinMode(botao, INPUT_PULLUP);
+  encoder.setPosition(1);  // start with the value of 10.
+}
+// Read the current position of the encoder and print out when changed.
+void loop() {
+  encoder.tick();
+  // get the current physical position and calc the logical position
+  newPos = encoder.getPosition();
+
+
+
+
+  if (newPos < ROTARYMIN) {
+    encoder.setPosition(ROTARYMIN);
+    newPos = ROTARYMIN;
+
+  } else if (newPos > ROTARYMAX) {
+    encoder.setPosition(ROTARYMAX);
+    newPos = ROTARYMAX;
+  }  // if
+
+
+  botao = digitalRead(6);
+  if (botao == LOW) {
+    select = newPos;
+    lcd.clear();
+  }
+  if (lastPos != newPos) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lastPos = newPos;
+  }
+
+
+
+  // if
+  if (select == 0) { zero(); }
+  if (select == 1) { um(); }
+  if (select == 2) { dois(); }
+  if (select == 3) { tres(); }
+  if (select == 4) { quatro(); }
+}
+
+//menu principal
+void zero() {
+
+  //parte do cursor
+  if (newPos == 1) {
+    a = 0;
+    b = 0;
+  }
+  if (newPos == 2) {
+    a = 0;
+    b = 1;
+  }
+  if (newPos == 1) {
+    a = 0;
+    b = 0;
+  }
+  if (newPos == 2) {
+    a = 0;
+    b = 1;
+  }
+
+  lcd.setCursor(a, b);
+
+  lcd.print(">");
+  lcd.setCursor(2, 0);
+  lcd.print("Menu1");
+  lcd.setCursor(2, 1);
+  lcd.print("Menu2");
+  lcd.setCursor(11, 0);
+  lcd.print("Menu3");
+  lcd.setCursor(11, 1);
+  lcd.print("Menu4");
+  lcd.setCursor(11, 1);
+  lcd.print("Menu4");
+  lcd.setCursor(11, 1);
+  lcd.print("Menu4");
+}
+void um() {
+  lcd.clear();
+  lcd.print("Aquecendo...");
+  //while (botão=high)
+
+
+
+  (void controle de tempratura);
+
+
+
+  delay(300);
+  lcd.clear();
+  select = 0;
+}
+void dois() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Umidade: ");
+  lcd.print(h);
+  lcd.print(" %");
+  delay(200);
+  botao = digitalRead(6);
+  if (botao == LOW) {
+    select = 0;
+    lcd.clear();
+    delay(200);
+  }
+}
+void tres() {
+  lcd.clear();
+  lcd.print("Temp: ");
+  lcd.print(t);
+  lcd.write(B11011111);
+  lcd.print(" C");
+  delay(200);
+  botao = digitalRead(6);
+  if (botao == LOW) {
+    select = 0;
+    lcd.clear();
+    delay(200);
+  }
+}
+void quatro() {
+  lcd.clear();
+  lcd.print("Buzzer ligado");
+  tone(buzzer, 1200, 500);
+  delay(100);
+  //Desligando o buzzer.
+  noTone(buzzer);
+  delay(100);
+
+  botao = digitalRead(6);
+  if (botao == LOW) {
+    select = 0;
+    lcd.clear();
+    delay(200);
+  }
+}
+
+
+
+
+#define outputA 6
+#define outputB 7
+
+int counter = 0;
+int aState;
+int aLastState;
+
+void setup() {
+  pinMode(outputA, INPUT);
+  pinMode(outputB, INPUT);
+
+  Serial.begin(9600);
+  lcd.begin(16, 2);
+  // Reads the initial state of the outputA
+  aLastState = digitalRead(outputA);
+}
+
+void loop() {
+  aState = digitalRead(outputA);  // Reads the "current" state of the outputA
+  // If the previous and the current state of the outputA are different, that means a Pulse has occured
+  if (aState != aLastState) {
+    // If the outputB state is different to the outputA state, that means the encoder is rotating clockwise
+    if (digitalRead(outputB) != aState) {
+      counter++;
+      lcd.clear();
+    } else {
+      counter--;
+      lcd.clear();
+    }
+    Serial.print("Position: ");
+    Serial.println(counter);
+    lcd.setCursor(0, 0);
+    lcd.print("Position: ");
+    lcd.setCursor(10, 0);
+    lcd.print(counter);
+  }
+  aLastState = aState;  // Updates the previous state of the outputA with the current state
+}
